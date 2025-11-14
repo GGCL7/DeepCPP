@@ -1,5 +1,5 @@
-# Welcome to MGCL‑CAP: Masked Graph Contrastive Learning with Gated Cross‑Attention for Chemical Allergenicity Prediction
-Chemical allergens are common in consumer and industrial products and can trigger hypersensitivity with important public-health and regulatory implications. Traditional experimental screening is time-consuming and labor-intensive, slowing discovery and risk assessment. Existing computational approaches often rely on hand-crafted fingerprints and shallow classifiers, which do not adequately capture molecular topology or cross-modal dependencies, limiting generalization and interpretability. We propose MGCL-CAP, a deep learning framework for chemical allergenicity prediction that enhances molecular representation through masked graph contrastive learning and gated cross-attention fusion. MGCL-CAP performs random subgraph masking within a shared GIN encoder to learn structure-invariant graph embeddings that remain robust to missing or spurious substructures. These embeddings are then integrated with one-dimensional molecular fingerprints via multi-head gated cross-attention to align modalities and emphasize salient chemical cues. Experimental results show that MGCL-CAP outperforms state-of-the-art allergenicity predictors and remains stable across reasonable hyperparameter ranges. Interpretability analyses highlight substructures consistent with known sensitization mechanisms, providing mechanistic insight. Overall, MGCL-CAP offers a reliable tool for computational assessment of chemical allergenicity, enabling efficient candidate prioritization and supporting safer formulation design while reducing experimental burden.
+# Welcome to DeepCPP: Integrating Multi-View Residue Graph and Protein Language Model for Cell-Penetrating Peptide Prediction via Global–Local Graph Aggregation and Cross-Attentive Fusion
+Cell-penetrating peptides (CPPs) enable intracellular delivery, but large-scale experimental discovery remains costly and slow. Existing computational predictors often rely on handcrafted sequence descriptors or protein language-model embeddings, leaving gaps in biophysical grounding and interpretability. In this study, we present DeepCPP, a dual-branch framework that integrates a biophysically informed, multi-view residue graph with ESM-2 sequence embeddings. Specifically, the graph branch encodes sequence neighborhood and physicochemical similarity via global–local aggregation with top-$k$ subgraph focusing and gated broadcast, while the ESM branch provides context-aware representations. The two views are aligned and fused by cross-attention with an HSIC-based decorrelation term, and a Kolmogorov–Arnold network head enhances nonlinear separability. We also curate a new benchmark from CPPsite3 and adopt cluster-controlled splits to reduce leakage and enable credible generalization. Experimental results indicate that DeepCPP outperforms state-of-the-art CPP and peptide-function prediction methods. Interpretability analyses highlight charge clustering, oriented amphipathicity, and termini patterns, offering actionable guidance for rational design. Overall, DeepCPP provides an accurate, interpretable, and scalable pre-screening tool for CPP discovery.
 
 ![The workflow of this study](https://github.com/GGCL7/MGCL-CAP/blob/main/workflow.png)
 
@@ -8,13 +8,13 @@ Chemical allergens are common in consumer and industrial products and can trigge
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/GGCL7/MGCL-CAP.git
-cd MGCL-CAP
+git clone https://github.com/GGCL7/DeepCPP.git
+cd DeepCPP
 ```
 2. **Set up the Python environment**
 ```bash
-conda create -n mgclcap python=3.10
-conda activate mgclcap
+conda create -n deepcpp python=3.10
+conda activate deepcpp
 pip install -r requirements.txt
 ```
 ## Model Training
@@ -22,7 +22,17 @@ pip install -r requirements.txt
 Train the model from scratch:
 
 ```bash
-python main.py
+python train.py \
+  --train_fasta "Data/train.txt" \
+  --test_fasta  "Data/test.txt"  \
+  --esm_dir "ESM_pre_model" \
+  --esm_batch_size 32 --esm_use_fp16 \
+  --batch_size 128 --lr 5e-4 --wd 1e-4 --max_epochs 100 \
+  --use_weighted_ce --pos_alpha 1.8 \
+  --gnn_node_in 48 --gnn_edge_in 3 --use_kan \
+  --pH 7.4 --edge_mode hybrid --window 3 --knn_k 8 \
+  --save_path "best_model.pth" --seed 2025
+
 ```
 The training script will automatically save the model with the best validation **MCC** to `best_model.pth`.
 
@@ -42,21 +52,19 @@ The script reports the following metrics:
 * Area Under the Curve (AUC)
 
 
-## 🛠️ Using MGCL-CAP for chemical allergenicity prediction
-
-## Single molecule prediction
-
-We provide a simple interface to predict allergenicity for a single SMILES string. For example, to predict the allergenicity of "C(CNC(NCCCC)=S)CC" with a pre-trained model:
+## 🛠️ Using DeepCPP for Cell-penetrating peptides prediction
 
 ```bash
-python predict.py --smiles "C(CNC(NCCCC)=S)CC" --model-path best_model.pth
+python predict.py \    
+    --test_fasta "Data/test.txt" \
+    --model_path "best_model.pth" \
+    --out_csv "predictions.csv"
 ```
-
 ## Output example:
 
 ```bash
-SMILES   : C(CNC(NCCCC)=S)CC
-Prob(+)  : 0.873241
-Label    : 1  (threshold=0.5)
+id   : pos1
+prob  : 0.930378
+pred_label   : CPP
 
 ```
