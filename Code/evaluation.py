@@ -6,7 +6,7 @@ import torch.utils.data as Data
 from sklearn.metrics import accuracy_score, recall_score, confusion_matrix, matthews_corrcoef, roc_auc_score
 
 from dataset import build_dataset_with_esm, collate_with_graph
-from model import FusionPepNetDual  # 确保与你训练时一致
+from model import FusionPepNetDual  
 
 
 TEST_FASTA = "Data/test.txt"
@@ -33,7 +33,7 @@ def evaluate(model, loader, device):
         if hasattr(g, "to"):
             g = g.to(device)
         else:
-            raise RuntimeError("需要 PyG Batch；请确保 graph_features 返回的是 PyG Data，并在 collate 中合并。")
+            raise RuntimeError("Need PyG Batch")
 
         logits, _, _, _ = model(feat, g)
         probs = torch.softmax(logits, dim=1)[:, 1]
