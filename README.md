@@ -22,9 +22,9 @@ pip install -r requirements.txt
 Train the model from scratch:
 
 ```bash
-python train.py \
+python Code/train.py \
   --train_fasta "Data/train.txt" \
-  --test_fasta  "Data/test.txt"  \
+  --test_fasta "Data/test.txt" \
   --esm_dir "ESM_pre_model" \
   --esm_batch_size 32 --esm_use_fp16 \
   --batch_size 128 --lr 5e-4 --wd 1e-4 --max_epochs 100 \
@@ -32,16 +32,18 @@ python train.py \
   --gnn_node_in 48 --gnn_edge_in 3 --use_kan \
   --pH 7.4 --edge_mode hybrid --window 3 --knn_k 8 \
   --save_path "best_model.pth" --seed 2025
-
 ```
-The training script will automatically save the model with the best validation **MCC** to `best_model.pth`.
+The training script automatically infers the ESM feature dimension from the selected checkpoint and saves the best model by validation **MCC** to `best_model.pth`.
 
 ## Model Evaluation
 
 Evaluate the trained model:
 
 ```bash
-python evaluation.py
+python Code/evaluation.py \
+  --test_fasta "Data/test.txt" \
+  --model_path "best_model.pth" \
+  --esm_dir "ESM_pre_model"
 ```
 The script reports the following metrics:
 
@@ -55,9 +57,10 @@ The script reports the following metrics:
 ## 🛠️ Using DeepCPP for Cell-penetrating peptides prediction
 
 ```bash
-python predict.py \    
+python Code/predict.py \
     --test_fasta "Data/test.txt" \
     --model_path "best_model.pth" \
+    --esm_dir "ESM_pre_model" \
     --out_csv "predictions.csv"
 ```
 ## Output example:
