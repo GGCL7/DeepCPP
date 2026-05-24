@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,10 +13,11 @@ except Exception:
 
 
 class MLPBranch(nn.Module):
-    def __init__(self, in_dim=773, out_dim=64, hidden=256, dropout=0.5):
+    def __init__(self, in_dim: Optional[int] = None, out_dim: int = 64, hidden: int = 256, dropout: float = 0.5):
         super().__init__()
+        first_linear = nn.LazyLinear(hidden) if in_dim is None else nn.Linear(in_dim, hidden)
         self.mlp = nn.Sequential(
-            nn.Linear(in_dim, hidden),
+            first_linear,
             nn.BatchNorm1d(hidden),
             nn.ReLU(),
             nn.Dropout(dropout),
@@ -185,11 +187,11 @@ class PairwiseCrossAttention(nn.Module):
 class FusionPepNetDual(nn.Module):
 
     def __init__(self,
-                 mlp_in_dim=773,
-                 gnn_node_in=48,
-                 gnn_edge_in=3,
-                 branch_out=64,
-                 use_kan=True):
+                 mlp_in_dim: Optional[int] = None,
+                 gnn_node_in: int = 48,
+                 gnn_edge_in: int = 3,
+                 branch_out: int = 64,
+                 use_kan: bool = True):
         super().__init__()
         self.branch_mlp = MLPBranch(in_dim=mlp_in_dim, out_dim=branch_out)
         self.branch_gnn = GNNBranch(node_in=gnn_node_in, edge_in=gnn_edge_in, out_dim=branch_out)
@@ -247,4 +249,3 @@ def hsic_loss(X, Y):
 def pair_hsic_loss(f_a, f_b, lambda_hsic=0.5):
 
     return lambda_hsic * hsic_loss(f_a, f_b)
-

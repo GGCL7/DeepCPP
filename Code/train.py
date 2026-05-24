@@ -12,6 +12,7 @@ import torch.utils.data as Data
 from sklearn.metrics import accuracy_score, recall_score, confusion_matrix, matthews_corrcoef, roc_auc_score
 
 from dataset import build_dataset_with_esm, collate_with_graph
+from ESM_Feature import infer_esm_feature_dim
 from model import FusionPepNetDual, pair_hsic_loss
 
 
@@ -145,6 +146,7 @@ def main():
     print(f"[INFO] device = {device}")
     print(f"[INFO] cwd    = {os.getcwd()}")
     print(f"[INFO] config = {vars(args)}")
+    print(f"[INFO] expected ESM feature dim = {infer_esm_feature_dim(args.esm_dir)}")
 
     # Build datasets (ESM features on the fly)
     train_ds = build_dataset_with_esm(
@@ -170,7 +172,8 @@ def main():
     test_loader  = Data.DataLoader(test_ds,  batch_size=args.batch_size, shuffle=False, collate_fn=collate_with_graph)
 
     # Model
-    mlp_in_dim = train_ds.features.shape[1]  # ESM mean+max -> 2H
+    mlp_in_dim = train_ds.feature_dim
+    print(f"[INFO] inferred input dim from dataset = {mlp_in_dim}")
     model = FusionPepNetDual(
         mlp_in_dim=mlp_in_dim,
         gnn_node_in=args.gnn_node_in,
@@ -216,7 +219,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 

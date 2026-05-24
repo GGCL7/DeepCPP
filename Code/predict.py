@@ -8,6 +8,7 @@ import torch
 import torch.utils.data as Data
 
 from dataset import build_dataset_with_esm, collate_with_graph
+from ESM_Feature import infer_esm_feature_dim
 from model import FusionPepNetDual
 
 
@@ -31,6 +32,13 @@ ESM_USE_FP16     = False
 
 
 THRESHOLD        = 0.5
+
+
+def load_state_dict_file(model_path: str, device: torch.device):
+    try:
+        return torch.load(model_path, map_location=device, weights_only=True)
+    except TypeError:
+        return torch.load(model_path, map_location=device)
 
 
 def read_fasta_headers(fasta_path: str) -> List[str]:
@@ -87,44 +95,51 @@ def main():
         type=str,
         default="predictions.csv",
     )
+    parser.add_argument("--esm_dir", type=str, default=ESM_DIR_OVERRIDE)
+    parser.add_argument("--esm_batch_size", type=int, default=ESM_BATCH_SIZE)
+    parser.add_argument("--esm_use_fp16", action="store_true", default=ESM_USE_FP16)
+    parser.add_argument("--threshold", type=float, default=THRESHOLD)
+    parser.add_argument("--disable_kan", action="store_true", help="Use a linear classifier instead of KAN.")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] device = {device}")
     print(f"[INFO] cwd    = {os.getcwd()}")
-    print(f"[INFO] config = {{'test_fasta': '{args.test_fasta}', 'model_path': '{args.model_path}', 'out_csv': '{args.out_csv}'}}")
+    print(f"[INFO] config = {vars(args)}")
+    print(f"[INFO] expected ESM feature dim = {infer_esm_feature_dim(args.esm_dir)}")
 
     # Dataset (ESM features computed on the fly)
     test_ds = build_dataset_with_esm(
         fasta_path=args.test_fasta,
         pH=PH, edge_mode=EDGE_MODE, window=WINDOW, knn_k=KNN_K,
         as_pyg=True, self_loops=SELF_LOOPS,
-        esm_dir=ESM_DIR_OVERRIDE, esm_batch_size=ESM_BATCH_SIZE, esm_use_fp16=ESM_USE_FP16
+        esm_dir=args.esm_dir, esm_batch_size=args.esm_batch_size, esm_use_fp16=args.esm_use_fp16
     )
     print(f"[INFO] Test N={len(test_ds)}")
+    print(f"[INFO] inferred input dim from dataset = {test_ds.feature_dim}")
 
     test_loader = Data.DataLoader(
         test_ds, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate_with_graph
     )
 
     # Model
-    mlp_in_dim = test_ds.features.shape[1]
+    mlp_in_dim = test_ds.feature_dim
     model = FusionPepNetDual(
         mlp_in_dim=mlp_in_dim,
         gnn_node_in=GNN_NODE_IN,
         gnn_edge_in=GNN_EDGE_IN,
-        use_kan=USE_KAN
+        use_kan=(not args.disable_kan)
     ).to(device)
 
     # Load weights
     if not os.path.exists(args.model_path):
         raise FileNotFoundError(f"Model file not found: {args.model_path}")
-    state = torch.load(args.model_path, map_location=device)
+    state = load_state_dict_file(args.model_path, device)
     model.load_state_dict(state, strict=True)
     print(f"[INFO] Loaded model weights: {args.model_path}")
 
     # Inference: get P(CPP) and labels, then convert to predicted-class probability
-    probs_cpp, labels = infer(model, test_loader, device, threshold=THRESHOLD)
+    probs_cpp, labels = infer(model, test_loader, device, threshold=args.threshold)
     prob_pred = np.where(labels == "CPP", probs_cpp, 1.0 - probs_cpp)
 
     # IDs from FASTA headers (same order as dataset)

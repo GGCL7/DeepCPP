@@ -1,27 +1,22 @@
 
 import os
+import argparse
 import numpy as np
 import torch
 import torch.utils.data as Data
 from sklearn.metrics import accuracy_score, recall_score, confusion_matrix, matthews_corrcoef, roc_auc_score
 
 from dataset import build_dataset_with_esm, collate_with_graph
-from model import FusionPepNetDual  
+from ESM_Feature import infer_esm_feature_dim
+from model import FusionPepNetDual
 
 
-TEST_FASTA = "Data/test.txt"
-MODEL_PATH = "best_model.pth"
+def load_state_dict_file(model_path: str, device: torch.device):
+    try:
+        return torch.load(model_path, map_location=device, weights_only=True)
+    except TypeError:
+        return torch.load(model_path, map_location=device)
 
-
-BATCH_SIZE   = 64
-GNN_NODE_IN  = 48
-GNN_EDGE_IN  = 3
-USE_KAN      = True
-
-
-ESM_BATCH_SIZE   = 16
-ESM_USE_FP16     = False
-ESM_DIR_OVERRIDE = None
 
 @torch.no_grad()
 def evaluate(model, loader, device):
@@ -63,39 +58,53 @@ def evaluate(model, loader, device):
     }
 
 def main():
+    parser = argparse.ArgumentParser(description="Evaluate a trained DeepCPP model.")
+    parser.add_argument("--test_fasta", type=str, default="Data/test.txt")
+    parser.add_argument("--model_path", type=str, default="best_model.pth")
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--gnn_node_in", type=int, default=48)
+    parser.add_argument("--gnn_edge_in", type=int, default=3)
+    parser.add_argument("--disable_kan", action="store_true", help="Use a linear classifier instead of KAN.")
+    parser.add_argument("--esm_dir", type=str, default=None)
+    parser.add_argument("--esm_batch_size", type=int, default=16)
+    parser.add_argument("--esm_use_fp16", action="store_true")
+    args = parser.parse_args()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] device = {device}")
     print(f"[INFO] cwd    = {os.getcwd()}")
+    print(f"[INFO] expected ESM feature dim = {infer_esm_feature_dim(args.esm_dir)}")
 
 
     test_ds = build_dataset_with_esm(
-        fasta_path=TEST_FASTA,
+        fasta_path=args.test_fasta,
         pH=7.4, edge_mode="hybrid", window=3, knn_k=8,
         as_pyg=True, self_loops=True,
-        esm_dir=ESM_DIR_OVERRIDE, esm_batch_size=ESM_BATCH_SIZE, esm_use_fp16=ESM_USE_FP16
+        esm_dir=args.esm_dir, esm_batch_size=args.esm_batch_size, esm_use_fp16=args.esm_use_fp16
     )
     labels = np.array(test_ds.labels, dtype=np.int64)
     print(f"[INFO] Test N={len(test_ds)} | pos={(labels==1).sum()} neg={(labels==0).sum()}")
+    print(f"[INFO] inferred input dim from dataset = {test_ds.feature_dim}")
 
     test_loader = Data.DataLoader(
-        test_ds, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate_with_graph
+        test_ds, batch_size=args.batch_size, shuffle=False, collate_fn=collate_with_graph
     )
 
 
-    mlp_in_dim = test_ds.features.shape[1]
+    mlp_in_dim = test_ds.feature_dim
     model = FusionPepNetDual(
         mlp_in_dim=mlp_in_dim,
-        gnn_node_in=GNN_NODE_IN,
-        gnn_edge_in=GNN_EDGE_IN,
-        use_kan=USE_KAN
+        gnn_node_in=args.gnn_node_in,
+        gnn_edge_in=args.gnn_edge_in,
+        use_kan=(not args.disable_kan)
     ).to(device)
 
 
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"Can't find model：{MODEL_PATH}")
-    state = torch.load(MODEL_PATH, map_location=device)
+    if not os.path.exists(args.model_path):
+        raise FileNotFoundError(f"Can't find model: {args.model_path}")
+    state = load_state_dict_file(args.model_path, device)
     model.load_state_dict(state, strict=True)
-    print(f"[INFO]：{MODEL_PATH}")
+    print(f"[INFO] loaded model weights: {args.model_path}")
 
 
     metrics = evaluate(model, test_loader, device)

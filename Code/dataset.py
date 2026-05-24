@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional, Any
 import numpy as np
 import torch
 import torch.utils.data as Data
-from ESM_Feature import esmfeature
+from ESM_Feature import esmfeature, infer_esm_feature_dim
 from graph_features import build_peptide_graph
 
 def read_protein_sequences_from_fasta(file_path: str) -> Tuple[List[str], List[int]]:
@@ -59,6 +59,7 @@ class MyGraphDataSet(Data.Dataset):
         self.features = features.astype(np.float32, copy=False)
         self.graphs = graphs
         self.labels = labels
+        self.feature_dim = int(self.features.shape[1])
 
     def __len__(self):
         return len(self.features)
@@ -100,6 +101,7 @@ def build_dataset_with_esm(
     esm_use_fp16: bool = False,
 ) -> MyGraphDataSet:
     sequences, labels = read_protein_sequences_from_fasta(fasta_path)
+    expected_feature_dim = infer_esm_feature_dim(esm_dir=esm_dir)
     feats_np = esmfeature(
         sequences,
         esm_dir=esm_dir,
@@ -108,6 +110,10 @@ def build_dataset_with_esm(
         device=None,
         return_tensor=False
     )
+    if feats_np.shape[1] != expected_feature_dim:
+        raise ValueError(
+            f"ESM feature dimension mismatch: expected {expected_feature_dim}, got {feats_np.shape[1]}"
+        )
 
 
     graphs = load_graphs_from_fasta(

@@ -1,17 +1,33 @@
 from typing import List, Tuple, Optional
 import torch
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoConfig, AutoTokenizer, AutoModel
 
 
 ESM_DIR: str = "ESM_pre_model"
 
 __all__ = [
     "ESM_DIR",
+    "infer_esm_hidden_size",
+    "infer_esm_feature_dim",
     "get_tokenizer_and_model",
     "masked_mean_max",
     "extract_features_concat_mean_max",
     "esmfeature",
 ]
+
+
+def infer_esm_hidden_size(esm_dir: Optional[str] = None) -> int:
+    if esm_dir is None:
+        esm_dir = ESM_DIR
+    config = AutoConfig.from_pretrained(esm_dir, trust_remote_code=True)
+    hidden_size = getattr(config, "hidden_size", None)
+    if hidden_size is None:
+        raise ValueError(f"Could not infer hidden_size from model config in: {esm_dir}")
+    return int(hidden_size)
+
+
+def infer_esm_feature_dim(esm_dir: Optional[str] = None) -> int:
+    return 2 * infer_esm_hidden_size(esm_dir=esm_dir)
 
 def get_tokenizer_and_model(
     esm_dir: Optional[str] = None,
